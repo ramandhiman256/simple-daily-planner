@@ -164,6 +164,24 @@
     await renderList(listEl, key, renderGeneration);
   }
 
+  async function editItemText(id, text, listEl, key) {
+    const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
+    if (!trimmed) return false;
+
+    const { error } = await supabase
+      .from("todos")
+      .update({ text: trimmed })
+      .eq("id", id)
+      .eq("user_id", currentUser.id);
+    if (error) {
+      showStorageError();
+      return false;
+    }
+    hideStorageError();
+    await renderList(listEl, key, renderGeneration);
+    return true;
+  }
+
   // ---------- Export / Import backup ----------
 
   async function collectAllData() {
@@ -280,6 +298,46 @@
 
       const span = document.createElement("span");
       span.textContent = item.text;
+      span.tabIndex = 0;
+      span.title = "Click to edit";
+      span.setAttribute("role", "button");
+      span.setAttribute("aria-label", `Edit "${item.text}"`);
+
+      function startEdit() {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = item.text;
+        input.maxLength = MAX_TASK_LENGTH;
+        input.className = "edit-input";
+
+        let settled = false;
+
+        const finish = async (shouldSave) => {
+          if (settled) return;
+          settled = true;
+          if (shouldSave && input.value.trim() !== item.text) {
+            const ok = await editItemText(item.id, input.value, listEl, key);
+            if (ok) return; // renderList already rebuilt the list
+          }
+          // No change, empty input, or save failed: just restore the span.
+          input.replaceWith(span);
+        };
+
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") finish(true);
+          if (e.key === "Escape") finish(false);
+        });
+        input.addEventListener("blur", () => finish(true));
+
+        span.replaceWith(input);
+        input.focus();
+        input.select();
+      }
+
+      span.addEventListener("click", startEdit);
+      span.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") startEdit();
+      });
 
       const delBtn = document.createElement("button");
       delBtn.className = "delete-btn";

@@ -176,11 +176,31 @@ body {
 .todo-list li span {
   flex: 1;
   word-break: break-word;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+
+.todo-list li span:hover,
+.todo-list li span:focus {
+  background: var(--bg);
+  outline: none;
 }
 
 .todo-list li.done span {
   text-decoration: line-through;
   color: var(--done);
+}
+
+.todo-list li .edit-input {
+  flex: 1;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font-size: inherit;
+  font-family: inherit;
 }
 
 .todo-list li .delete-btn {
