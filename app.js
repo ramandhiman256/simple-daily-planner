@@ -4,6 +4,18 @@
   const SUPABASE_URL = "https://gvsmwgyzamewmonnnfzj.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_RVYELJSBGrI4sjtN76Z4Ow_gDlzACvi";
 
+  if (typeof window.supabase === "undefined") {
+    const authPanel = document.getElementById("authPanel");
+    authPanel.hidden = false;
+    const msg = document.createElement("p");
+    msg.className = "auth-message";
+    msg.style.color = "#e0566f";
+    msg.textContent =
+      "Could not load a required script. This page may be blocked by an ad blocker, content blocker, or firewall on this network/browser — please try a different network or disabling any blockers, then reload.";
+    authPanel.querySelector(".auth-card").appendChild(msg);
+    return;
+  }
+
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   let viewedDate = startOfDay(new Date());
@@ -503,12 +515,35 @@
     }
   });
 
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((resolve) =>
+        setTimeout(
+          () => resolve({ error: { message: "This is taking too long — check your internet connection (or try a different network/browser) and try again." } }),
+          ms
+        )
+      ),
+    ]);
+  }
+
+  function setAuthButtonsBusy(busy) {
+    const loginBtn = document.getElementById("loginBtn");
+    const signupBtn = document.getElementById("signupBtn");
+    loginBtn.disabled = busy;
+    signupBtn.disabled = busy;
+    loginBtn.textContent = busy ? "Logging in…" : "Log in";
+    signupBtn.textContent = busy ? "Signing up…" : "Sign up";
+  }
+
   document.getElementById("authForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     hideAuthMessage();
     const email = document.getElementById("authEmail").value.trim();
     const password = document.getElementById("authPassword").value;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setAuthButtonsBusy(true);
+    const { error } = await withTimeout(supabase.auth.signInWithPassword({ email, password }), 15000);
+    setAuthButtonsBusy(false);
     if (error) showAuthMessage(error.message);
   });
 
@@ -520,7 +555,9 @@
       showAuthMessage("Enter an email and a password with at least 6 characters.");
       return;
     }
-    const { error } = await supabase.auth.signUp({ email, password });
+    setAuthButtonsBusy(true);
+    const { error } = await withTimeout(supabase.auth.signUp({ email, password }), 15000);
+    setAuthButtonsBusy(false);
     if (error) {
       showAuthMessage(error.message);
     } else {
