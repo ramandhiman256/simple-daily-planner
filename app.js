@@ -8,6 +8,7 @@
 
   let viewedDate = startOfDay(new Date());
   let currentUser = null;
+  let renderGeneration = 0;
 
   // ---------- Date helpers ----------
 
@@ -132,27 +133,35 @@
       return;
     }
     hideStorageError();
-    await renderList(listEl, key);
+    await renderList(listEl, key, renderGeneration);
   }
 
   async function toggleItem(id, done, listEl, key) {
-    const { error } = await supabase.from("todos").update({ done }).eq("id", id);
+    const { error } = await supabase
+      .from("todos")
+      .update({ done })
+      .eq("id", id)
+      .eq("user_id", currentUser.id);
     if (error) {
       showStorageError();
       return;
     }
     hideStorageError();
-    await renderList(listEl, key);
+    await renderList(listEl, key, renderGeneration);
   }
 
   async function deleteItem(id, listEl, key) {
-    const { error } = await supabase.from("todos").delete().eq("id", id);
+    const { error } = await supabase
+      .from("todos")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", currentUser.id);
     if (error) {
       showStorageError();
       return;
     }
     hideStorageError();
-    await renderList(listEl, key);
+    await renderList(listEl, key, renderGeneration);
   }
 
   // ---------- Export / Import backup ----------
@@ -236,7 +245,7 @@
 
   // ---------- Rendering ----------
 
-  async function renderList(listEl, key) {
+  async function renderList(listEl, key, generation) {
     listEl.innerHTML = "";
     const loadingLi = document.createElement("li");
     loadingLi.className = "empty-msg";
@@ -245,6 +254,7 @@
     listEl.appendChild(loadingLi);
 
     const items = await loadList(key);
+    if (generation !== renderGeneration) return; // a newer render has since started; discard this stale result
     listEl.innerHTML = "";
 
     if (items.length === 0) {
@@ -290,6 +300,8 @@
   // ---------- Main render ----------
 
   async function render() {
+    const generation = ++renderGeneration;
+
     const dayKey = getDayKey(viewedDate);
     const monthKey = getMonthKey(viewedDate);
     const { key: weekKey, weekStart, weekEnd } = getWeekInfo(viewedDate);
@@ -306,9 +318,9 @@
     setupForm("monthlyForm", "monthlyInput", monthKey, "monthlyList");
 
     await Promise.all([
-      renderList(document.getElementById("dailyList"), dayKey),
-      renderList(document.getElementById("weeklyList"), weekKey),
-      renderList(document.getElementById("monthlyList"), monthKey),
+      renderList(document.getElementById("dailyList"), dayKey, generation),
+      renderList(document.getElementById("weeklyList"), weekKey, generation),
+      renderList(document.getElementById("monthlyList"), monthKey, generation),
     ]);
   }
 
