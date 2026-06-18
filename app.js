@@ -563,13 +563,16 @@
       return;
     }
     setAuthButtonsBusy(true);
-    const { error } = await withTimeout(supabase.auth.signUp({ email, password }), 15000);
+    const { data, error } = await withTimeout(supabase.auth.signUp({ email, password }), 15000);
     setAuthButtonsBusy(false);
     if (error) {
       showAuthMessage(friendlyErrorMessage(error));
-    } else {
+    } else if (!data.session) {
+      // Email confirmation is required and no session was returned yet.
       showAuthMessage("Check your email to confirm your account, then log in.");
     }
+    // If data.session exists, email confirmation is off and the user is
+    // already signed in — onAuthStateChange will switch to the planner UI.
   });
 
   document.getElementById("logoutBtn").addEventListener("click", async () => {
