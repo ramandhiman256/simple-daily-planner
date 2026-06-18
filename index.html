@@ -15,11 +15,26 @@
     </div>
     <button id="nextDay" class="nav-btn" title="Next day" aria-label="Next day">&#8594;</button>
     <button id="todayBtn" class="today-btn">Today</button>
+    <span id="userEmail" class="user-email" hidden></span>
+    <button id="logoutBtn" class="nav-btn" hidden>Log out</button>
   </header>
+
+  <section id="authPanel" class="auth-panel" hidden>
+    <h1>My Planner</h1>
+    <form id="authForm">
+      <input type="email" id="authEmail" placeholder="Email" aria-label="Email" required autocomplete="email">
+      <input type="password" id="authPassword" placeholder="Password" aria-label="Password" required autocomplete="current-password" minlength="6">
+      <div class="auth-buttons">
+        <button type="submit" id="loginBtn">Log in</button>
+        <button type="button" id="signupBtn">Sign up</button>
+      </div>
+    </form>
+    <p id="authMessage" class="auth-message" hidden></p>
+  </section>
 
   <div id="storageError" class="storage-error" role="alert" hidden></div>
 
-  <main class="panels">
+  <main class="panels" id="panels" hidden>
     <section class="panel daily-panel" id="dailyPanel">
       <h2 id="dailyTitle">Daily To-Do</h2>
       <form class="add-form" id="dailyForm">
@@ -50,19 +65,19 @@
     </div>
   </main>
 
-  <section class="backup-controls" aria-label="Backup and restore">
-    <button id="connectFileBtn" type="button" hidden>Connect file for auto-save</button>
+  <section class="backup-controls" id="backupControls" aria-label="Backup and restore" hidden>
     <button id="exportBtn" type="button">Export to file</button>
     <button id="importBtn" type="button">Import from file</button>
     <input type="file" id="importInput" accept="application/json" hidden>
-    <span id="fileStatus" class="file-status">Not connected — using browser storage only</span>
+    <span id="fileStatus" class="file-status">Export/Import your data as JSON</span>
   </section>
   <div id="fileError" class="storage-error" role="alert" hidden></div>
 
   <footer class="disclaimer">
-    Your to-do lists are saved in this browser's local storage by default, so they won't be accessible from another browser or device, and clearing your browser data will erase them. To protect against that, you can connect a local file for automatic backup (where supported) or use Export/Import to manually back up and restore your lists as a JSON file.
+    Your to-do lists are saved in your account in the cloud, so they're available wherever you log in. Use Export/Import any time to back up or restore your lists as a JSON file.
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

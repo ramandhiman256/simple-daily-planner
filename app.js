@@ -1,8 +1,13 @@
 (function () {
   "use strict";
 
+  const SUPABASE_URL = "https://gvsmwgyzamewmonnnfzj.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_RVYELJSBGrI4sjtN76Z4Ow_gDlzACvi";
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
   let viewedDate = startOfDay(new Date());
-  let fileHandle = null;
+  let currentUser = null;
 
   // ---------- Date helpers ----------
 
@@ -17,10 +22,6 @@
   }
 
   const MAX_TASK_LENGTH = 200;
-
-  function genId() {
-    return (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
 
   function getDayKey(date) {
     return `daily:${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
@@ -78,70 +79,16 @@
     return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
   }
 
-  // ---------- Storage ----------
+  // ---------- Storage error banner ----------
 
-  function loadList(key) {
-    let raw;
-    try {
-      raw = localStorage.getItem(key);
-    } catch (e) {
-      return [];
-    }
-    if (!raw) return [];
-
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      return [];
-    }
-    if (!Array.isArray(parsed)) return [];
-
-    let migrated = false;
-    const normalized = parsed
-      .filter((item) => item && typeof item === "object" && typeof item.text === "string")
-      .map((item) => {
-        if (typeof item.id !== "string") migrated = true;
-        return {
-          id: typeof item.id === "string" ? item.id : genId(),
-          text: item.text.slice(0, MAX_TASK_LENGTH),
-          done: !!item.done,
-        };
-      });
-
-    // Persist newly-assigned ids immediately so they stay stable across reads.
-    if (migrated) {
-      try {
-        localStorage.setItem(key, JSON.stringify(normalized));
-      } catch (e) {
-        // Non-fatal: ids will just be re-assigned next read.
-      }
-    }
-
-    return normalized;
-  }
-
-  function saveList(key, items) {
-    try {
-      localStorage.setItem(key, JSON.stringify(items));
-      hideStorageError();
-      mirrorToFile();
-      return true;
-    } catch (e) {
-      showStorageError();
-      return false;
-    }
-  }
-
-  function showStorageError() {
+  function showStorageError(message) {
     const el = document.getElementById("storageError");
-    el.textContent = "Could not save your changes — your browser's storage may be full, disabled, or blocked (e.g. private browsing mode).";
+    el.textContent = message || "Could not sync your changes — check your internet connection and try again.";
     el.hidden = false;
   }
 
   function hideStorageError() {
-    const el = document.getElementById("storageError");
-    el.hidden = true;
+    document.getElementById("storageError").hidden = true;
   }
 
   function showFileError(message) {
@@ -154,75 +101,118 @@
     document.getElementById("fileError").hidden = true;
   }
 
-  function updateFileStatus(text) {
-    document.getElementById("fileStatus").textContent = text;
-  }
+  // ---------- Data layer (Supabase) ----------
 
-  // ---------- Local file backup ----------
+  async function loadList(key) {
+    const { data, error } = await supabase
+      .from("todos")
+      .select("id, text, done")
+      .eq("user_id", currentUser.id)
+      .eq("list_key", key)
+      .order("created_at", { ascending: true });
 
-  function getAllListKeys() {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (/^(daily|weekly|monthly):/.test(key)) keys.push(key);
+    if (error) {
+      showStorageError();
+      return [];
     }
-    return keys;
-  }
-
-  function collectAllData() {
-    const data = { _meta: { exportedAt: new Date().toISOString(), version: 1 } };
-    getAllListKeys().forEach((key) => {
-      data[key] = loadList(key);
-    });
+    hideStorageError();
     return data;
   }
 
-  function applyImportedData(data) {
+  async function addItem(key, text, listEl) {
+    const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
+    if (!trimmed) return;
+
+    const { error } = await supabase
+      .from("todos")
+      .insert({ user_id: currentUser.id, list_key: key, text: trimmed, done: false });
+
+    if (error) {
+      showStorageError();
+      return;
+    }
+    hideStorageError();
+    await renderList(listEl, key);
+  }
+
+  async function toggleItem(id, done, listEl, key) {
+    const { error } = await supabase.from("todos").update({ done }).eq("id", id);
+    if (error) {
+      showStorageError();
+      return;
+    }
+    hideStorageError();
+    await renderList(listEl, key);
+  }
+
+  async function deleteItem(id, listEl, key) {
+    const { error } = await supabase.from("todos").delete().eq("id", id);
+    if (error) {
+      showStorageError();
+      return;
+    }
+    hideStorageError();
+    await renderList(listEl, key);
+  }
+
+  // ---------- Export / Import backup ----------
+
+  async function collectAllData() {
+    const { data, error } = await supabase
+      .from("todos")
+      .select("list_key, text, done")
+      .eq("user_id", currentUser.id);
+
+    const grouped = { _meta: { exportedAt: new Date().toISOString(), version: 1 } };
+    if (error) return grouped;
+
+    data.forEach((row) => {
+      if (!grouped[row.list_key]) grouped[row.list_key] = [];
+      grouped[row.list_key].push({ text: row.text, done: row.done });
+    });
+    return grouped;
+  }
+
+  async function applyImportedData(data) {
     if (!data || typeof data !== "object") {
       showFileError("That file doesn't look like a valid backup.");
       return;
     }
-    try {
-      Object.keys(data).forEach((key) => {
-        if (key === "_meta") return;
-        if (!/^(daily|weekly|monthly):/.test(key)) return;
-        if (!Array.isArray(data[key])) return;
-        localStorage.setItem(key, JSON.stringify(data[key]));
+
+    const rows = [];
+    Object.keys(data).forEach((key) => {
+      if (key === "_meta") return;
+      if (!/^(daily|weekly|monthly):/.test(key)) return;
+      if (!Array.isArray(data[key])) return;
+      data[key].forEach((item) => {
+        if (item && typeof item.text === "string") {
+          rows.push({
+            user_id: currentUser.id,
+            list_key: key,
+            text: item.text.slice(0, MAX_TASK_LENGTH),
+            done: !!item.done,
+          });
+        }
       });
-      hideFileError();
-      render();
-    } catch (e) {
-      showFileError("Could not import — your browser's storage may be full, disabled, or blocked.");
+    });
+
+    if (rows.length === 0) {
+      showFileError("That file doesn't contain any importable tasks.");
+      return;
     }
+
+    const { error } = await supabase.from("todos").insert(rows);
+    if (error) {
+      showFileError("Could not import — check your internet connection and try again.");
+      return;
+    }
+    hideFileError();
+    await render();
   }
 
-  async function mirrorToFile() {
-    if (!fileHandle) return;
-    try {
-      const writable = await fileHandle.createWritable();
-      await writable.write(JSON.stringify(collectAllData(), null, 2));
-      await writable.close();
-    } catch (e) {
-      fileHandle = null;
-      updateFileStatus("Not connected — using browser storage only");
-    }
-  }
-
-  async function connectFile() {
-    try {
-      fileHandle = await window.showSaveFilePicker({
-        suggestedName: "planner-backup.json",
-        types: [{ description: "JSON", accept: { "application/json": [".json"] } }],
-      });
-      await mirrorToFile();
-      if (fileHandle) updateFileStatus(`Auto-saving to ${fileHandle.name}`);
-    } catch (e) {
-      // User cancelled the picker — no-op.
-    }
-  }
-
-  function exportToFile() {
-    const blob = new Blob([JSON.stringify(collectAllData(), null, 2)], { type: "application/json" });
+  async function exportToFile() {
+    const data = await collectAllData();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -246,8 +236,15 @@
 
   // ---------- Rendering ----------
 
-  function renderList(listEl, key) {
-    const items = loadList(key);
+  async function renderList(listEl, key) {
+    listEl.innerHTML = "";
+    const loadingLi = document.createElement("li");
+    loadingLi.className = "empty-msg";
+    loadingLi.textContent = "Loading…";
+    loadingLi.style.borderBottom = "none";
+    listEl.appendChild(loadingLi);
+
+    const items = await loadList(key);
     listEl.innerHTML = "";
 
     if (items.length === 0) {
@@ -268,11 +265,7 @@
       checkbox.checked = !!item.done;
       checkbox.setAttribute("aria-label", `Mark "${item.text}" as ${item.done ? "not done" : "done"}`);
       checkbox.addEventListener("change", () => {
-        const current = loadList(key);
-        const target = current.find((i) => i.id === item.id);
-        if (target) target.done = checkbox.checked;
-        saveList(key, current);
-        renderList(listEl, key);
+        toggleItem(item.id, checkbox.checked, listEl, key);
       });
 
       const span = document.createElement("span");
@@ -284,9 +277,7 @@
       delBtn.title = "Delete";
       delBtn.setAttribute("aria-label", `Delete "${item.text}"`);
       delBtn.addEventListener("click", () => {
-        const current = loadList(key).filter((i) => i.id !== item.id);
-        saveList(key, current);
-        renderList(listEl, key);
+        deleteItem(item.id, listEl, key);
       });
 
       li.appendChild(checkbox);
@@ -296,18 +287,9 @@
     });
   }
 
-  function addItem(key, text, listEl) {
-    const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
-    if (!trimmed) return;
-    const items = loadList(key);
-    items.push({ id: genId(), text: trimmed, done: false });
-    saveList(key, items);
-    renderList(listEl, key);
-  }
-
   // ---------- Main render ----------
 
-  function render() {
+  async function render() {
     const dayKey = getDayKey(viewedDate);
     const monthKey = getMonthKey(viewedDate);
     const { key: weekKey, weekStart, weekEnd } = getWeekInfo(viewedDate);
@@ -319,18 +301,19 @@
     document.getElementById("weeklyTitle").textContent = `Weekly — ${formatDateShort(weekStart)} to ${formatDateShort(weekEnd)}`;
     document.getElementById("monthlyTitle").textContent = `Monthly — ${formatMonthLabel(viewedDate)}`;
 
-    renderList(document.getElementById("dailyList"), dayKey);
-    renderList(document.getElementById("weeklyList"), weekKey);
-    renderList(document.getElementById("monthlyList"), monthKey);
-
     setupForm("dailyForm", "dailyInput", dayKey, "dailyList");
     setupForm("weeklyForm", "weeklyInput", weekKey, "weeklyList");
     setupForm("monthlyForm", "monthlyInput", monthKey, "monthlyList");
+
+    await Promise.all([
+      renderList(document.getElementById("dailyList"), dayKey),
+      renderList(document.getElementById("weeklyList"), weekKey),
+      renderList(document.getElementById("monthlyList"), monthKey),
+    ]);
   }
 
   function setupForm(formId, inputId, key, listId) {
     const form = document.getElementById(formId);
-    const input = document.getElementById(inputId);
     const listEl = document.getElementById(listId);
 
     // Replace form to clear old listeners (since key changes on navigation)
@@ -374,12 +357,6 @@
 
   // ---------- Backup controls ----------
 
-  if (typeof window.showSaveFilePicker === "function") {
-    const connectBtn = document.getElementById("connectFileBtn");
-    connectBtn.hidden = false;
-    connectBtn.addEventListener("click", connectFile);
-  }
-
   document.getElementById("exportBtn").addEventListener("click", exportToFile);
 
   document.getElementById("importBtn").addEventListener("click", () => {
@@ -392,5 +369,72 @@
     e.target.value = "";
   });
 
-  render();
+  // ---------- Auth ----------
+
+  function showAuthMessage(text) {
+    const el = document.getElementById("authMessage");
+    el.textContent = text;
+    el.hidden = false;
+  }
+
+  function hideAuthMessage() {
+    document.getElementById("authMessage").hidden = true;
+  }
+
+  function setLoggedInUI(user) {
+    document.getElementById("authPanel").hidden = true;
+    document.getElementById("panels").hidden = false;
+    document.getElementById("backupControls").hidden = false;
+    const emailEl = document.getElementById("userEmail");
+    emailEl.textContent = user.email;
+    emailEl.hidden = false;
+    document.getElementById("logoutBtn").hidden = false;
+  }
+
+  function setLoggedOutUI() {
+    document.getElementById("authPanel").hidden = false;
+    document.getElementById("panels").hidden = true;
+    document.getElementById("backupControls").hidden = true;
+    document.getElementById("userEmail").hidden = true;
+    document.getElementById("logoutBtn").hidden = true;
+  }
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    currentUser = session ? session.user : null;
+    if (currentUser) {
+      setLoggedInUI(currentUser);
+      render();
+    } else {
+      setLoggedOutUI();
+    }
+  });
+
+  document.getElementById("authForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideAuthMessage();
+    const email = document.getElementById("authEmail").value.trim();
+    const password = document.getElementById("authPassword").value;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) showAuthMessage(error.message);
+  });
+
+  document.getElementById("signupBtn").addEventListener("click", async () => {
+    hideAuthMessage();
+    const email = document.getElementById("authEmail").value.trim();
+    const password = document.getElementById("authPassword").value;
+    if (!email || password.length < 6) {
+      showAuthMessage("Enter an email and a password with at least 6 characters.");
+      return;
+    }
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      showAuthMessage(error.message);
+    } else {
+      showAuthMessage("Check your email to confirm your account, then log in.");
+    }
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", async () => {
+    await supabase.auth.signOut();
+  });
 })();
