@@ -453,8 +453,10 @@
 
   function setLoggedInUI(user) {
     document.getElementById("authPanel").hidden = true;
+    document.getElementById("topbar").hidden = false;
     document.getElementById("panels").hidden = false;
     document.getElementById("backupControls").hidden = false;
+    document.getElementById("disclaimerFooter").hidden = false;
     const emailEl = document.getElementById("userEmail");
     emailEl.textContent = user.email;
     emailEl.hidden = false;
@@ -463,8 +465,10 @@
 
   function setLoggedOutUI() {
     document.getElementById("authPanel").hidden = false;
+    document.getElementById("topbar").hidden = true;
     document.getElementById("panels").hidden = true;
     document.getElementById("backupControls").hidden = true;
+    document.getElementById("disclaimerFooter").hidden = true;
     document.getElementById("userEmail").hidden = true;
     document.getElementById("logoutBtn").hidden = true;
   }

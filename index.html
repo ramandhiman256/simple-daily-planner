@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Planner</title>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
-  <header class="topbar">
+  <header class="topbar" id="topbar" hidden>
     <button id="prevDay" class="nav-btn" title="Previous day" aria-label="Previous day">&#8592;</button>
     <div class="date-display">
       <h1 id="currentDateLabel"></h1>
@@ -25,16 +25,20 @@
       <p class="auth-tagline">A free website to help you plan your day effectively, while keeping your weekly and monthly goals always in view.</p>
     </div>
     <div class="auth-panel">
-      <form id="authForm">
-        <input type="email" id="authEmail" placeholder="Email" aria-label="Email" required autocomplete="email">
-        <input type="password" id="authPassword" placeholder="Password" aria-label="Password" required autocomplete="current-password" minlength="6">
-        <div class="auth-buttons">
-          <button type="submit" id="loginBtn">Log in</button>
-          <button type="button" id="signupBtn">Sign up</button>
-        </div>
-      </form>
-      <p id="authMessage" class="auth-message" hidden></p>
-      <p class="auth-disclaimer">Built with Claude Code. Runs on Supabase's free cloud database and Resend's free email service for sign-up verification.</p>
+      <div class="auth-card">
+        <h2 class="auth-card-heading">Welcome</h2>
+        <p class="auth-card-subheading">Log in or create a free account to start planning.</p>
+        <form id="authForm">
+          <input type="email" id="authEmail" placeholder="Email" aria-label="Email" required autocomplete="email">
+          <input type="password" id="authPassword" placeholder="Password" aria-label="Password" required autocomplete="current-password" minlength="6">
+          <div class="auth-buttons">
+            <button type="submit" id="loginBtn">Log in</button>
+            <button type="button" id="signupBtn">Sign up</button>
+          </div>
+        </form>
+        <p id="authMessage" class="auth-message" hidden></p>
+        <p class="auth-disclaimer">Built with Claude Code. Runs on Supabase's free cloud database and Resend's free email service for sign-up verification.</p>
+      </div>
     </div>
   </section>
 
@@ -79,11 +83,11 @@
   </section>
   <div id="fileError" class="storage-error" role="alert" hidden></div>
 
-  <footer class="disclaimer">
+  <footer class="disclaimer" id="disclaimerFooter" hidden>
     Your to-do lists are saved in your account in the cloud, so they're available wherever you log in. Use Export/Import any time to back up or restore your lists as a JSON file.
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
