@@ -451,6 +451,11 @@
     document.getElementById("authMessage").hidden = true;
   }
 
+  function closeAccountMenu() {
+    document.getElementById("accountDropdown").classList.remove("open");
+    document.getElementById("accountMenuBtn").setAttribute("aria-expanded", "false");
+  }
+
   function setLoggedInUI(user) {
     document.getElementById("authPanel").hidden = true;
     document.getElementById("topbar").hidden = false;
@@ -461,6 +466,7 @@
     emailEl.textContent = user.email;
     emailEl.hidden = false;
     document.getElementById("logoutBtn").hidden = false;
+    document.getElementById("accountMenuBtn").hidden = false;
   }
 
   function setLoggedOutUI() {
@@ -471,7 +477,21 @@
     document.getElementById("disclaimerFooter").hidden = true;
     document.getElementById("userEmail").hidden = true;
     document.getElementById("logoutBtn").hidden = true;
+    document.getElementById("accountMenuBtn").hidden = true;
+    closeAccountMenu();
   }
+
+  document.getElementById("accountMenuBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const dropdown = document.getElementById("accountDropdown");
+    const isOpen = dropdown.classList.toggle("open");
+    document.getElementById("accountMenuBtn").setAttribute("aria-expanded", String(isOpen));
+  });
+
+  document.addEventListener("click", (e) => {
+    const menu = document.getElementById("accountMenu");
+    if (!menu.contains(e.target)) closeAccountMenu();
+  });
 
   supabase.auth.onAuthStateChange((_event, session) => {
     currentUser = session ? session.user : null;

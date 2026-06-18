@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Planner</title>
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <header class="topbar" id="topbar" hidden>
@@ -15,8 +15,13 @@
     </div>
     <button id="nextDay" class="nav-btn" title="Next day" aria-label="Next day">&#8594;</button>
     <button id="todayBtn" class="today-btn">Today</button>
-    <span id="userEmail" class="user-email" hidden></span>
-    <button id="logoutBtn" class="nav-btn" hidden>Log out</button>
+    <div class="account-menu" id="accountMenu">
+      <button id="accountMenuBtn" class="nav-btn account-menu-btn" hidden aria-label="Account menu" aria-haspopup="true" aria-expanded="false">&#8942;</button>
+      <div class="account-dropdown" id="accountDropdown">
+        <span id="userEmail" class="user-email" hidden></span>
+        <button id="logoutBtn" class="nav-btn" hidden>Log out</button>
+      </div>
+    </div>
   </header>
 
   <section id="authPanel" class="auth-screen" hidden>
@@ -88,6 +93,6 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
