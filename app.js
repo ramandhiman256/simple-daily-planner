@@ -459,6 +459,13 @@
     el.hidden = false;
   }
 
+  function friendlyErrorMessage(error) {
+    if (error && typeof error.message === "string" && error.message.trim() && error.message.trim() !== "{}") {
+      return error.message;
+    }
+    return "Something went wrong on our end. Please try again in a moment.";
+  }
+
   function hideAuthMessage() {
     document.getElementById("authMessage").hidden = true;
   }
@@ -544,7 +551,7 @@
     setAuthButtonsBusy(true);
     const { error } = await withTimeout(supabase.auth.signInWithPassword({ email, password }), 15000);
     setAuthButtonsBusy(false);
-    if (error) showAuthMessage(error.message);
+    if (error) showAuthMessage(friendlyErrorMessage(error));
   });
 
   document.getElementById("signupBtn").addEventListener("click", async () => {
@@ -559,7 +566,7 @@
     const { error } = await withTimeout(supabase.auth.signUp({ email, password }), 15000);
     setAuthButtonsBusy(false);
     if (error) {
-      showAuthMessage(error.message);
+      showAuthMessage(friendlyErrorMessage(error));
     } else {
       showAuthMessage("Check your email to confirm your account, then log in.");
     }
