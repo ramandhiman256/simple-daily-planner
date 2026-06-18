@@ -15,6 +15,12 @@
     return String(n).padStart(2, "0");
   }
 
+  const MAX_TASK_LENGTH = 200;
+
+  function genId() {
+    return (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   function getDayKey(date) {
     return `daily:${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
   }
@@ -74,16 +80,66 @@
   // ---------- Storage ----------
 
   function loadList(key) {
+    let raw;
     try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : [];
+      raw = localStorage.getItem(key);
     } catch (e) {
       return [];
     }
+    if (!raw) return [];
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      return [];
+    }
+    if (!Array.isArray(parsed)) return [];
+
+    let migrated = false;
+    const normalized = parsed
+      .filter((item) => item && typeof item === "object" && typeof item.text === "string")
+      .map((item) => {
+        if (typeof item.id !== "string") migrated = true;
+        return {
+          id: typeof item.id === "string" ? item.id : genId(),
+          text: item.text.slice(0, MAX_TASK_LENGTH),
+          done: !!item.done,
+        };
+      });
+
+    // Persist newly-assigned ids immediately so they stay stable across reads.
+    if (migrated) {
+      try {
+        localStorage.setItem(key, JSON.stringify(normalized));
+      } catch (e) {
+        // Non-fatal: ids will just be re-assigned next read.
+      }
+    }
+
+    return normalized;
   }
 
   function saveList(key, items) {
-    localStorage.setItem(key, JSON.stringify(items));
+    try {
+      localStorage.setItem(key, JSON.stringify(items));
+      hideStorageError();
+      return true;
+    } catch (e) {
+      showStorageError();
+      return false;
+    }
+  }
+
+  function showStorageError() {
+    const el = document.getElementById("storageError");
+    el.textContent = "Could not save your changes — your browser's storage may be full, disabled, or blocked (e.g. private browsing mode).";
+    el.hidden = false;
+  }
+
+  function hideStorageError() {
+    const el = document.getElementById("storageError");
+    el.hidden = true;
   }
 
   // ---------- Rendering ----------
@@ -101,16 +157,18 @@
       return;
     }
 
-    items.forEach((item, index) => {
+    items.forEach((item) => {
       const li = document.createElement("li");
       if (item.done) li.classList.add("done");
 
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = !!item.done;
+      checkbox.setAttribute("aria-label", `Mark "${item.text}" as ${item.done ? "not done" : "done"}`);
       checkbox.addEventListener("change", () => {
         const current = loadList(key);
-        current[index].done = checkbox.checked;
+        const target = current.find((i) => i.id === item.id);
+        if (target) target.done = checkbox.checked;
         saveList(key, current);
         renderList(listEl, key);
       });
@@ -122,9 +180,9 @@
       delBtn.className = "delete-btn";
       delBtn.textContent = "×";
       delBtn.title = "Delete";
+      delBtn.setAttribute("aria-label", `Delete "${item.text}"`);
       delBtn.addEventListener("click", () => {
-        const current = loadList(key);
-        current.splice(index, 1);
+        const current = loadList(key).filter((i) => i.id !== item.id);
         saveList(key, current);
         renderList(listEl, key);
       });
@@ -137,10 +195,10 @@
   }
 
   function addItem(key, text, listEl) {
-    const trimmed = text.trim();
+    const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
     if (!trimmed) return;
     const items = loadList(key);
-    items.push({ text: trimmed, done: false });
+    items.push({ id: genId(), text: trimmed, done: false });
     saveList(key, items);
     renderList(listEl, key);
   }
@@ -190,11 +248,13 @@
 
   document.getElementById("prevDay").addEventListener("click", () => {
     viewedDate.setDate(viewedDate.getDate() - 1);
+    viewedDate = startOfDay(viewedDate);
     render();
   });
 
   document.getElementById("nextDay").addEventListener("click", () => {
     viewedDate.setDate(viewedDate.getDate() + 1);
+    viewedDate = startOfDay(viewedDate);
     render();
   });
 

@@ -200,6 +200,15 @@ body {
   padding: 20px 0;
 }
 
+.storage-error {
+  background: #fdecef;
+  color: var(--danger);
+  border-bottom: 1px solid #f6c4cd;
+  text-align: center;
+  font-size: 0.85rem;
+  padding: 8px 16px;
+}
+
 .disclaimer {
   border-top: 1px solid var(--border);
   background: var(--panel-bg);
