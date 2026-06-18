@@ -50,8 +50,17 @@
     </div>
   </main>
 
+  <section class="backup-controls" aria-label="Backup and restore">
+    <button id="connectFileBtn" type="button" hidden>Connect file for auto-save</button>
+    <button id="exportBtn" type="button">Export to file</button>
+    <button id="importBtn" type="button">Import from file</button>
+    <input type="file" id="importInput" accept="application/json" hidden>
+    <span id="fileStatus" class="file-status">Not connected — using browser storage only</span>
+  </section>
+  <div id="fileError" class="storage-error" role="alert" hidden></div>
+
   <footer class="disclaimer">
-    This is a static website — your to-do lists are saved only as local storage in this browser on this device and hence won't be assessible through any other browser or device. Clearing your browser data, cookies, or site data will permanently erase the to-do lists.
+    Your to-do lists are saved in this browser's local storage by default, so they won't be accessible from another browser or device, and clearing your browser data will erase them. To protect against that, you can connect a local file for automatic backup (where supported) or use Export/Import to manually back up and restore your lists as a JSON file.
   </footer>
 
   <script src="app.js"></script>

@@ -209,6 +209,36 @@ body {
   padding: 8px 16px;
 }
 
+.backup-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 12px 20px;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--border);
+  background: var(--panel-bg);
+}
+
+.backup-controls button {
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.backup-controls button:hover {
+  background: var(--bg);
+}
+
+.file-status {
+  color: var(--muted);
+}
+
 .disclaimer {
   border-top: 1px solid var(--border);
   background: var(--panel-bg);

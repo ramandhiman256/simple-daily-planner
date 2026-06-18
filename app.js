@@ -2,6 +2,7 @@
   "use strict";
 
   let viewedDate = startOfDay(new Date());
+  let fileHandle = null;
 
   // ---------- Date helpers ----------
 
@@ -124,6 +125,7 @@
     try {
       localStorage.setItem(key, JSON.stringify(items));
       hideStorageError();
+      mirrorToFile();
       return true;
     } catch (e) {
       showStorageError();
@@ -140,6 +142,106 @@
   function hideStorageError() {
     const el = document.getElementById("storageError");
     el.hidden = true;
+  }
+
+  function showFileError(message) {
+    const el = document.getElementById("fileError");
+    el.textContent = message;
+    el.hidden = false;
+  }
+
+  function hideFileError() {
+    document.getElementById("fileError").hidden = true;
+  }
+
+  function updateFileStatus(text) {
+    document.getElementById("fileStatus").textContent = text;
+  }
+
+  // ---------- Local file backup ----------
+
+  function getAllListKeys() {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (/^(daily|weekly|monthly):/.test(key)) keys.push(key);
+    }
+    return keys;
+  }
+
+  function collectAllData() {
+    const data = { _meta: { exportedAt: new Date().toISOString(), version: 1 } };
+    getAllListKeys().forEach((key) => {
+      data[key] = loadList(key);
+    });
+    return data;
+  }
+
+  function applyImportedData(data) {
+    if (!data || typeof data !== "object") {
+      showFileError("That file doesn't look like a valid backup.");
+      return;
+    }
+    try {
+      Object.keys(data).forEach((key) => {
+        if (key === "_meta") return;
+        if (!/^(daily|weekly|monthly):/.test(key)) return;
+        if (!Array.isArray(data[key])) return;
+        localStorage.setItem(key, JSON.stringify(data[key]));
+      });
+      hideFileError();
+      render();
+    } catch (e) {
+      showFileError("Could not import — your browser's storage may be full, disabled, or blocked.");
+    }
+  }
+
+  async function mirrorToFile() {
+    if (!fileHandle) return;
+    try {
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(collectAllData(), null, 2));
+      await writable.close();
+    } catch (e) {
+      fileHandle = null;
+      updateFileStatus("Not connected — using browser storage only");
+    }
+  }
+
+  async function connectFile() {
+    try {
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: "planner-backup.json",
+        types: [{ description: "JSON", accept: { "application/json": [".json"] } }],
+      });
+      await mirrorToFile();
+      if (fileHandle) updateFileStatus(`Auto-saving to ${fileHandle.name}`);
+    } catch (e) {
+      // User cancelled the picker — no-op.
+    }
+  }
+
+  function exportToFile() {
+    const blob = new Blob([JSON.stringify(collectAllData(), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "planner-backup.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        applyImportedData(JSON.parse(reader.result));
+      } catch (e) {
+        showFileError("That file isn't valid JSON.");
+      }
+    };
+    reader.onerror = () => showFileError("Could not read that file.");
+    reader.readAsText(file);
   }
 
   // ---------- Rendering ----------
@@ -268,6 +370,26 @@
     const [y, m, d] = e.target.value.split("-").map(Number);
     viewedDate = startOfDay(new Date(y, m - 1, d));
     render();
+  });
+
+  // ---------- Backup controls ----------
+
+  if (typeof window.showSaveFilePicker === "function") {
+    const connectBtn = document.getElementById("connectFileBtn");
+    connectBtn.hidden = false;
+    connectBtn.addEventListener("click", connectFile);
+  }
+
+  document.getElementById("exportBtn").addEventListener("click", exportToFile);
+
+  document.getElementById("importBtn").addEventListener("click", () => {
+    document.getElementById("importInput").click();
+  });
+
+  document.getElementById("importInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importFromFile(file);
+    e.target.value = "";
   });
 
   render();
