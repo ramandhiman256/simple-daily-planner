@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Planner</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="prevDay" class="nav-btn" title="Previous day">&#8592;</button>
+    <div class="date-display">
+      <h1 id="currentDateLabel"></h1>
+      <input type="date" id="datePicker">
+    </div>
+    <button id="nextDay" class="nav-btn" title="Next day">&#8594;</button>
+    <button id="todayBtn" class="today-btn">Today</button>
+  </header>
+
+  <main class="panels">
+    <section class="panel daily-panel" id="dailyPanel">
+      <h2 id="dailyTitle">Daily To-Do</h2>
+      <form class="add-form" id="dailyForm">
+        <input type="text" id="dailyInput" placeholder="Add a task..." autocomplete="off">
+        <button type="submit">Add</button>
+      </form>
+      <ul class="todo-list" id="dailyList"></ul>
+    </section>
+
+    <div class="side-column">
+      <section class="panel weekly-panel" id="weeklyPanel">
+        <h2 id="weeklyTitle">Weekly To-Do</h2>
+        <form class="add-form" id="weeklyForm">
+          <input type="text" id="weeklyInput" placeholder="Add a task..." autocomplete="off">
+          <button type="submit">Add</button>
+        </form>
+        <ul class="todo-list" id="weeklyList"></ul>
+      </section>
+
+      <section class="panel monthly-panel" id="monthlyPanel">
+        <h2 id="monthlyTitle">Monthly To-Do</h2>
+        <form class="add-form" id="monthlyForm">
+          <input type="text" id="monthlyInput" placeholder="Add a task..." autocomplete="off">
+          <button type="submit">Add</button>
+        </form>
+        <ul class="todo-list" id="monthlyList"></ul>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
