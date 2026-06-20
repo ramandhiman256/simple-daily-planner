@@ -136,12 +136,14 @@ body {
 
 .add-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
 
 .add-form input {
   flex: 1;
+  min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -563,5 +565,14 @@ body {
   }
   .account-dropdown .user-email {
     word-break: break-all;
+  }
+  .add-form input[type="text"] {
+    flex: 1 1 100%;
+  }
+  .category-select {
+    flex: 1;
+  }
+  .add-form button {
+    flex: 0 0 auto;
   }
 }
