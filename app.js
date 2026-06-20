@@ -121,10 +121,10 @@
   async function loadList(key) {
     const { data, error } = await supabase
       .from("todos")
-      .select("id, text, done, category, priority")
+      .select("id, text, done, category, priority, sort_order")
       .eq("user_id", currentUser.id)
       .eq("list_key", key)
-      .order("created_at", { ascending: true });
+      .order("sort_order", { ascending: true });
 
     if (error) {
       showStorageError();
@@ -138,9 +138,14 @@
     const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
     if (!trimmed) return;
 
-    const { error } = await supabase
-      .from("todos")
-      .insert({ user_id: currentUser.id, list_key: key, text: trimmed, done: false, category: category || null });
+    const { error } = await supabase.from("todos").insert({
+      user_id: currentUser.id,
+      list_key: key,
+      text: trimmed,
+      done: false,
+      category: category || null,
+      sort_order: Date.now(),
+    });
 
     if (error) {
       showStorageError();
@@ -176,6 +181,20 @@
     }
     hideStorageError();
     await refreshList(key);
+  }
+
+  async function reorderItem(id, sortOrder, key) {
+    const { error } = await supabase
+      .from("todos")
+      .update({ sort_order: sortOrder })
+      .eq("id", id)
+      .eq("user_id", currentUser.id);
+    if (error) {
+      showStorageError();
+    } else {
+      hideStorageError();
+    }
+    await refreshList(key); // resyncs the DOM with the authoritative DB order either way
   }
 
   async function deleteItem(id, key) {
@@ -215,8 +234,9 @@
   async function collectAllData() {
     const { data, error } = await supabase
       .from("todos")
-      .select("list_key, text, done, category, priority")
-      .eq("user_id", currentUser.id);
+      .select("list_key, text, done, category, priority, sort_order")
+      .eq("user_id", currentUser.id)
+      .order("sort_order", { ascending: true });
 
     const grouped = { _meta: { exportedAt: new Date().toISOString(), version: 1 } };
     if (error) return grouped;
@@ -239,7 +259,7 @@
       if (key === "_meta") return;
       if (!/^(daily|weekly|monthly):/.test(key)) return;
       if (!Array.isArray(data[key])) return;
-      data[key].forEach((item) => {
+      data[key].forEach((item, index) => {
         if (item && typeof item.text === "string") {
           rows.push({
             user_id: currentUser.id,
@@ -248,6 +268,7 @@
             done: !!item.done,
             category: CATEGORIES.includes(item.category) ? item.category : null,
             priority: !!item.priority,
+            sort_order: Date.now() + index,
           });
         }
       });
@@ -306,6 +327,14 @@
     const li = document.createElement("li");
     if (item.done) li.classList.add("done");
     if (item.priority) li.classList.add("priority");
+    li.dataset.id = item.id;
+    li.dataset.sortOrder = item.sort_order;
+
+    const dragHandle = document.createElement("span");
+    dragHandle.className = "drag-handle";
+    dragHandle.textContent = "⠿";
+    dragHandle.setAttribute("aria-hidden", "true");
+    attachDragHandle(dragHandle, li, key);
 
     const starBtn = document.createElement("button");
     starBtn.className = "star-btn" + (item.priority ? " active" : "");
@@ -377,11 +406,61 @@
       deleteItem(item.id, key);
     });
 
+    li.appendChild(dragHandle);
     li.appendChild(starBtn);
     li.appendChild(checkbox);
     li.appendChild(span);
     li.appendChild(delBtn);
     return li;
+  }
+
+  function computeNewSortOrder(li) {
+    const prev = li.previousElementSibling;
+    const next = li.nextElementSibling;
+    const prevOrder = prev ? parseFloat(prev.dataset.sortOrder) : null;
+    const nextOrder = next ? parseFloat(next.dataset.sortOrder) : null;
+    if (prevOrder != null && nextOrder != null) return (prevOrder + nextOrder) / 2;
+    if (prevOrder != null) return prevOrder + 1;
+    if (nextOrder != null) return nextOrder - 1;
+    return Date.now();
+  }
+
+  function attachDragHandle(handle, li, key) {
+    let dragging = false;
+
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      dragging = true;
+      li.classList.add("dragging");
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const container = li.parentElement;
+      if (!container) return;
+      const siblings = [...container.querySelectorAll("li:not(.dragging)")];
+      const after = siblings.find((sib) => {
+        const rect = sib.getBoundingClientRect();
+        return e.clientY < rect.top + rect.height / 2;
+      });
+      if (after) {
+        container.insertBefore(li, after);
+      } else {
+        container.appendChild(li);
+      }
+    });
+
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      li.classList.remove("dragging");
+      handle.releasePointerCapture(e.pointerId);
+      reorderItem(li.dataset.id, computeNewSortOrder(li), key);
+    };
+
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
   }
 
   function populateListItems(listEl, items, key) {
