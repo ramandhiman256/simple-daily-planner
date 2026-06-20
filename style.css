@@ -249,6 +249,19 @@ body {
   flex-shrink: 0;
 }
 
+.task-text-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.carry-badge {
+  font-size: 0.7rem;
+  color: var(--danger);
+  margin-top: 2px;
+}
+
 .todo-list li span {
   flex: 1;
   word-break: break-word;

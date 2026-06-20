@@ -118,20 +118,74 @@
 
   const CATEGORIES = ["work", "household", "misc"];
 
-  async function loadList(key) {
-    const { data, error } = await supabase
-      .from("todos")
-      .select("id, text, done, category, priority")
-      .eq("user_id", currentUser.id)
-      .eq("list_key", key)
-      .order("created_at", { ascending: true });
+  function isCurrentPeriod(key) {
+    const prefix = key.split(":")[0];
+    const now = new Date();
+    if (prefix === "daily") return key === getDayKey(now);
+    if (prefix === "weekly") return key === getWeekInfo(now).key;
+    if (prefix === "monthly") return key === getMonthKey(now);
+    return false;
+  }
 
-    if (error) {
+  async function loadList(key) {
+    const baseSelect = "id, text, done, category, priority, created_at, list_key";
+
+    if (!isCurrentPeriod(key)) {
+      const { data, error } = await supabase
+        .from("todos")
+        .select(baseSelect)
+        .eq("user_id", currentUser.id)
+        .eq("list_key", key)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        showStorageError();
+        return [];
+      }
+      hideStorageError();
+      return data.map((row) => ({ ...row, carried: false }));
+    }
+
+    const prefix = key.split(":")[0];
+    const [ownResult, carryResult] = await Promise.all([
+      supabase
+        .from("todos")
+        .select(baseSelect)
+        .eq("user_id", currentUser.id)
+        .eq("list_key", key),
+      supabase
+        .from("todos")
+        .select(baseSelect)
+        .eq("user_id", currentUser.id)
+        .like("list_key", `${prefix}:%`)
+        .lt("list_key", key)
+        .eq("done", false),
+    ]);
+
+    if (ownResult.error || carryResult.error) {
       showStorageError();
       return [];
     }
     hideStorageError();
-    return data;
+
+    const merged = [
+      ...ownResult.data.map((row) => ({ ...row, carried: false })),
+      ...carryResult.data.map((row) => ({ ...row, carried: true })),
+    ];
+    merged.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    return merged;
+  }
+
+  function formatCarryBadge(item) {
+    const prefix = item.list_key.split(":")[0];
+    if (prefix === "daily") {
+      const [, dateStr] = item.list_key.split(":");
+      const [y, m, d] = dateStr.split("-").map(Number);
+      const orig = new Date(y, m - 1, d);
+      const days = Math.round((startOfDay(new Date()) - orig) / 86400000);
+      return `Carried forward · ${days} day${days === 1 ? "" : "s"} late`;
+    }
+    return "Carried forward";
   }
 
   async function addItem(key, text, category) {
@@ -306,6 +360,7 @@
     const li = document.createElement("li");
     if (item.done) li.classList.add("done");
     if (item.priority) li.classList.add("priority");
+    if (item.carried) li.classList.add("carried");
 
     const starBtn = document.createElement("button");
     starBtn.className = "star-btn" + (item.priority ? " active" : "");
@@ -368,6 +423,16 @@
       if (e.key === "Enter") startEdit();
     });
 
+    const textWrap = document.createElement("div");
+    textWrap.className = "task-text-wrap";
+    textWrap.appendChild(span);
+    if (item.carried) {
+      const badge = document.createElement("span");
+      badge.className = "carry-badge";
+      badge.textContent = formatCarryBadge(item);
+      textWrap.appendChild(badge);
+    }
+
     const delBtn = document.createElement("button");
     delBtn.className = "delete-btn";
     delBtn.textContent = "×";
@@ -379,7 +444,7 @@
 
     li.appendChild(starBtn);
     li.appendChild(checkbox);
-    li.appendChild(span);
+    li.appendChild(textWrap);
     li.appendChild(delBtn);
     return li;
   }
