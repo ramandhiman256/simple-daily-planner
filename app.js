@@ -116,10 +116,12 @@
 
   // ---------- Data layer (Supabase) ----------
 
+  const CATEGORIES = ["work", "household", "misc"];
+
   async function loadList(key) {
     const { data, error } = await supabase
       .from("todos")
-      .select("id, text, done")
+      .select("id, text, done, category, priority")
       .eq("user_id", currentUser.id)
       .eq("list_key", key)
       .order("created_at", { ascending: true });
@@ -132,23 +134,23 @@
     return data;
   }
 
-  async function addItem(key, text, listEl) {
+  async function addItem(key, text, category) {
     const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
     if (!trimmed) return;
 
     const { error } = await supabase
       .from("todos")
-      .insert({ user_id: currentUser.id, list_key: key, text: trimmed, done: false });
+      .insert({ user_id: currentUser.id, list_key: key, text: trimmed, done: false, category: category || null });
 
     if (error) {
       showStorageError();
       return;
     }
     hideStorageError();
-    await renderList(listEl, key, renderGeneration);
+    await refreshList(key);
   }
 
-  async function toggleItem(id, done, listEl, key) {
+  async function toggleItem(id, done, key) {
     const { error } = await supabase
       .from("todos")
       .update({ done })
@@ -159,10 +161,24 @@
       return;
     }
     hideStorageError();
-    await renderList(listEl, key, renderGeneration);
+    await refreshList(key);
   }
 
-  async function deleteItem(id, listEl, key) {
+  async function togglePriority(id, priority, key) {
+    const { error } = await supabase
+      .from("todos")
+      .update({ priority })
+      .eq("id", id)
+      .eq("user_id", currentUser.id);
+    if (error) {
+      showStorageError();
+      return;
+    }
+    hideStorageError();
+    await refreshList(key);
+  }
+
+  async function deleteItem(id, key) {
     const { error } = await supabase
       .from("todos")
       .delete()
@@ -173,10 +189,10 @@
       return;
     }
     hideStorageError();
-    await renderList(listEl, key, renderGeneration);
+    await refreshList(key);
   }
 
-  async function editItemText(id, text, listEl, key) {
+  async function editItemText(id, text, key) {
     const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
     if (!trimmed) return false;
 
@@ -190,7 +206,7 @@
       return false;
     }
     hideStorageError();
-    await renderList(listEl, key, renderGeneration);
+    await refreshList(key);
     return true;
   }
 
@@ -199,7 +215,7 @@
   async function collectAllData() {
     const { data, error } = await supabase
       .from("todos")
-      .select("list_key, text, done")
+      .select("list_key, text, done, category, priority")
       .eq("user_id", currentUser.id);
 
     const grouped = { _meta: { exportedAt: new Date().toISOString(), version: 1 } };
@@ -207,7 +223,7 @@
 
     data.forEach((row) => {
       if (!grouped[row.list_key]) grouped[row.list_key] = [];
-      grouped[row.list_key].push({ text: row.text, done: row.done });
+      grouped[row.list_key].push({ text: row.text, done: row.done, category: row.category, priority: row.priority });
     });
     return grouped;
   }
@@ -230,6 +246,8 @@
             list_key: key,
             text: item.text.slice(0, MAX_TASK_LENGTH),
             done: !!item.done,
+            category: CATEGORIES.includes(item.category) ? item.category : null,
+            priority: !!item.priority,
           });
         }
       });
@@ -275,18 +293,99 @@
 
   // ---------- Rendering ----------
 
-  async function renderList(listEl, key, generation) {
+  function showLoadingPlaceholder(listEl) {
     listEl.innerHTML = "";
     const loadingLi = document.createElement("li");
     loadingLi.className = "empty-msg";
     loadingLi.textContent = "Loading…";
     loadingLi.style.borderBottom = "none";
     listEl.appendChild(loadingLi);
+  }
 
-    const items = await loadList(key);
-    if (generation !== renderGeneration) return; // a newer render has since started; discard this stale result
+  function buildItemRow(item, key) {
+    const li = document.createElement("li");
+    if (item.done) li.classList.add("done");
+    if (item.priority) li.classList.add("priority");
+
+    const starBtn = document.createElement("button");
+    starBtn.className = "star-btn" + (item.priority ? " active" : "");
+    starBtn.textContent = item.priority ? "★" : "☆";
+    const starLabel = item.priority ? `Remove high priority from "${item.text}"` : `Mark "${item.text}" as high priority`;
+    starBtn.title = starLabel;
+    starBtn.setAttribute("aria-label", starLabel);
+    starBtn.addEventListener("click", () => {
+      togglePriority(item.id, !item.priority, key);
+    });
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !!item.done;
+    checkbox.setAttribute("aria-label", `Mark "${item.text}" as ${item.done ? "not done" : "done"}`);
+    checkbox.addEventListener("change", () => {
+      toggleItem(item.id, checkbox.checked, key);
+    });
+
+    const span = document.createElement("span");
+    span.textContent = item.text;
+    span.tabIndex = 0;
+    span.title = "Click to edit";
+    span.setAttribute("role", "button");
+    span.setAttribute("aria-label", `Edit "${item.text}"`);
+
+    function startEdit() {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = item.text;
+      input.maxLength = MAX_TASK_LENGTH;
+      input.className = "edit-input";
+
+      let settled = false;
+
+      const finish = async (shouldSave) => {
+        if (settled) return;
+        settled = true;
+        if (shouldSave && input.value.trim() !== item.text) {
+          const ok = await editItemText(item.id, input.value, key);
+          if (ok) return; // refreshList already rebuilt the list
+        }
+        // No change, empty input, or save failed: just restore the span.
+        input.replaceWith(span);
+      };
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") finish(true);
+        if (e.key === "Escape") finish(false);
+      });
+      input.addEventListener("blur", () => finish(true));
+
+      span.replaceWith(input);
+      input.focus();
+      input.select();
+    }
+
+    span.addEventListener("click", startEdit);
+    span.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") startEdit();
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "delete-btn";
+    delBtn.textContent = "×";
+    delBtn.title = "Delete";
+    delBtn.setAttribute("aria-label", `Delete "${item.text}"`);
+    delBtn.addEventListener("click", () => {
+      deleteItem(item.id, key);
+    });
+
+    li.appendChild(starBtn);
+    li.appendChild(checkbox);
+    li.appendChild(span);
+    li.appendChild(delBtn);
+    return li;
+  }
+
+  function populateListItems(listEl, items, key) {
     listEl.innerHTML = "";
-
     if (items.length === 0) {
       const li = document.createElement("li");
       li.className = "empty-msg";
@@ -295,76 +394,49 @@
       listEl.appendChild(li);
       return;
     }
+    items.forEach((item) => listEl.appendChild(buildItemRow(item, key)));
+  }
 
+  async function renderList(listEl, key, generation) {
+    showLoadingPlaceholder(listEl);
+    const items = await loadList(key);
+    if (generation !== renderGeneration) return; // a newer render has since started; discard this stale result
+    populateListItems(listEl, items, key);
+  }
+
+  function dailyListElements() {
+    return {
+      work: document.getElementById("dailyListWork"),
+      household: document.getElementById("dailyListHousehold"),
+      misc: document.getElementById("dailyListMisc"),
+    };
+  }
+
+  async function renderDailyLists(key, generation) {
+    const listEls = dailyListElements();
+    Object.values(listEls).forEach(showLoadingPlaceholder);
+
+    const items = await loadList(key);
+    if (generation !== renderGeneration) return;
+
+    const grouped = { work: [], household: [], misc: [] };
     items.forEach((item) => {
-      const li = document.createElement("li");
-      if (item.done) li.classList.add("done");
-
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = !!item.done;
-      checkbox.setAttribute("aria-label", `Mark "${item.text}" as ${item.done ? "not done" : "done"}`);
-      checkbox.addEventListener("change", () => {
-        toggleItem(item.id, checkbox.checked, listEl, key);
-      });
-
-      const span = document.createElement("span");
-      span.textContent = item.text;
-      span.tabIndex = 0;
-      span.title = "Click to edit";
-      span.setAttribute("role", "button");
-      span.setAttribute("aria-label", `Edit "${item.text}"`);
-
-      function startEdit() {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = item.text;
-        input.maxLength = MAX_TASK_LENGTH;
-        input.className = "edit-input";
-
-        let settled = false;
-
-        const finish = async (shouldSave) => {
-          if (settled) return;
-          settled = true;
-          if (shouldSave && input.value.trim() !== item.text) {
-            const ok = await editItemText(item.id, input.value, listEl, key);
-            if (ok) return; // renderList already rebuilt the list
-          }
-          // No change, empty input, or save failed: just restore the span.
-          input.replaceWith(span);
-        };
-
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") finish(true);
-          if (e.key === "Escape") finish(false);
-        });
-        input.addEventListener("blur", () => finish(true));
-
-        span.replaceWith(input);
-        input.focus();
-        input.select();
-      }
-
-      span.addEventListener("click", startEdit);
-      span.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") startEdit();
-      });
-
-      const delBtn = document.createElement("button");
-      delBtn.className = "delete-btn";
-      delBtn.textContent = "×";
-      delBtn.title = "Delete";
-      delBtn.setAttribute("aria-label", `Delete "${item.text}"`);
-      delBtn.addEventListener("click", () => {
-        deleteItem(item.id, listEl, key);
-      });
-
-      li.appendChild(checkbox);
-      li.appendChild(span);
-      li.appendChild(delBtn);
-      listEl.appendChild(li);
+      const cat = CATEGORIES.includes(item.category) ? item.category : "misc";
+      grouped[cat].push(item);
     });
+
+    CATEGORIES.forEach((cat) => populateListItems(listEls[cat], grouped[cat], key));
+  }
+
+  async function refreshList(key) {
+    if (key.startsWith("daily:")) {
+      await renderDailyLists(key, renderGeneration);
+    } else {
+      const listEl = key.startsWith("weekly:")
+        ? document.getElementById("weeklyList")
+        : document.getElementById("monthlyList");
+      await renderList(listEl, key, renderGeneration);
+    }
   }
 
   // ---------- Main render ----------
@@ -383,29 +455,29 @@
     document.getElementById("weeklyTitle").textContent = `Weekly — ${formatDateShort(weekStart)} to ${formatDateShort(weekEnd)}`;
     document.getElementById("monthlyTitle").textContent = `Monthly — ${formatMonthLabel(viewedDate)}`;
 
-    setupForm("dailyForm", "dailyInput", dayKey, "dailyList");
-    setupForm("weeklyForm", "weeklyInput", weekKey, "weeklyList");
-    setupForm("monthlyForm", "monthlyInput", monthKey, "monthlyList");
+    setupForm("dailyForm", "dailyInput", dayKey, true);
+    setupForm("weeklyForm", "weeklyInput", weekKey, false);
+    setupForm("monthlyForm", "monthlyInput", monthKey, false);
 
     await Promise.all([
-      renderList(document.getElementById("dailyList"), dayKey, generation),
+      renderDailyLists(dayKey, generation),
       renderList(document.getElementById("weeklyList"), weekKey, generation),
       renderList(document.getElementById("monthlyList"), monthKey, generation),
     ]);
   }
 
-  function setupForm(formId, inputId, key, listId) {
+  function setupForm(formId, inputId, key, hasCategory) {
     const form = document.getElementById(formId);
-    const listEl = document.getElementById(listId);
 
     // Replace form to clear old listeners (since key changes on navigation)
     const newForm = form.cloneNode(true);
     form.parentNode.replaceChild(newForm, form);
     const newInput = newForm.querySelector("input");
+    const categorySelect = hasCategory ? newForm.querySelector("select") : null;
 
     newForm.addEventListener("submit", (e) => {
       e.preventDefault();
-      addItem(key, newInput.value, listEl);
+      addItem(key, newInput.value, categorySelect ? categorySelect.value : null);
       newInput.value = "";
       newInput.focus();
     });

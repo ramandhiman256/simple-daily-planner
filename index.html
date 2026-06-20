@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Planner</title>
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <header class="topbar" id="topbar" hidden>
@@ -54,9 +54,25 @@
       <h2 id="dailyTitle">Daily To-Do</h2>
       <form class="add-form" id="dailyForm">
         <input type="text" id="dailyInput" placeholder="Add a task..." aria-label="New daily task" autocomplete="off" maxlength="200">
+        <select id="dailyCategory" class="category-select" aria-label="Category">
+          <option value="work">Work</option>
+          <option value="household">Household</option>
+          <option value="misc">Miscellaneous</option>
+        </select>
         <button type="submit">Add</button>
       </form>
-      <ul class="todo-list" id="dailyList" aria-live="polite"></ul>
+      <div class="category-group">
+        <h3 class="category-heading">Work</h3>
+        <ul class="todo-list" id="dailyListWork" aria-live="polite"></ul>
+      </div>
+      <div class="category-group">
+        <h3 class="category-heading">Household</h3>
+        <ul class="todo-list" id="dailyListHousehold" aria-live="polite"></ul>
+      </div>
+      <div class="category-group">
+        <h3 class="category-heading">Miscellaneous</h3>
+        <ul class="todo-list" id="dailyListMisc" aria-live="polite"></ul>
+      </div>
     </section>
 
     <div class="side-column">
@@ -93,6 +109,6 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
