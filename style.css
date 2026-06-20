@@ -227,21 +227,6 @@ body {
   background: rgba(245, 166, 35, 0.07);
 }
 
-.todo-list li.dragging {
-  opacity: 0.5;
-  user-select: none;
-}
-
-.todo-list li .drag-handle {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-
 .todo-list li .star-btn {
   border: none;
   background: transparent;
